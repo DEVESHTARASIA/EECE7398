@@ -9,6 +9,7 @@ import sys
 import cv2 as cv
 from PIL import Image
 import os
+import matplotlib.pyplot as plt
 
 # ---------- helper functions -----------
 def train(dataloader, model, loss_fn, optimizer):
@@ -23,13 +24,8 @@ def train(dataloader, model, loss_fn, optimizer):
         loss = loss_fn(pred, y)
         # Backpropagation
         loss.backward()
-        print("Do Something")
         optimizer.step()
         
-
-        if batch % 100 == 0:
-            loss, current = loss.item(), batch * len(X)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
             
 def test(dataloader, model, loss_fn):
     size = len(dataloader.dataset)
@@ -47,10 +43,12 @@ def test(dataloader, model, loss_fn):
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
     
 def evaluation(classes,img_path):
-    arr = os.listdir("./")
+    arr = os.listdir("./model")
     if "model.pth" in arr:
-        model.load_state_dict(torch.load("./model/model.pth",map_location=torch.device('cpu')))
+        model.load_state_dict(torch.load("./model/model.pth"))
         model.eval()
+        model_children = list(model.children())
+        layer = model_children[0]
         name = "./"+img_path
         img = Image.open(name).convert('RGB')
         resize = transforms.Resize([32,32])
@@ -58,12 +56,27 @@ def evaluation(classes,img_path):
         convert_tensor = transforms.ToTensor()
         tensor_ip = convert_tensor(img)
         tensor_ip = tensor_ip.unsqueeze(0)
+        tensor_ip = tensor_ip.to(device)
+        visualize(layer,tensor_ip)
         with torch.no_grad():
             pred = model(tensor_ip)
             predicted = classes[pred[0].argmax(0)]
             print(f'Predicted: "{predicted}"')
     else:
         print("Please train the model")
+        
+def visualize(l,t_ip):
+    res = l(t_ip)
+    res = torch.squeeze(res)
+    res = res.to("cpu")
+    res = res.detach().numpy()
+    for i in range(1,res.shape[0]+1):
+        plt.subplot(4,8,i)
+        plt.imshow(res[i-1,:,:],cmap="gray")
+        plt.axis("off")
+    
+    plt.savefig("./CONV_rslt.png")
+    
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 #dataset = torchvision.datasets.CIFAR10(root='./data.cifar10',download=True)
@@ -89,19 +102,29 @@ class Q2Net(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv2d(3,32,5,stride=1)
-        self.pool1 = nn.MaxPool2d(2,2)
-        self.conv2 = nn.Conv2d(32,64,5)
-        self.fc1 = nn.Linear(64 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 10)
-        #self.fc3 = nn.Linear(84, 10)
+        self.BatchNorm1 = nn.BatchNorm2d(32)
+        self.conv2 = nn.Conv2d(32,64,3)
+        self.BatchNorm2 = nn.BatchNorm2d(64)
+        self.conv3 = nn.Conv2d(64,128,3)
+        self.BatchNorm3 = nn.BatchNorm2d(128)
+        self.pool = nn.MaxPool2d(2,2)
+        self.fc1 = nn.Linear(128 * 12 * 12, 256)
+        self.fc2 = nn.Linear(256, 120)
+        self.fc3 = nn.Linear(120, 10)
         
     def forward(self, x):
-        x = self.pool1(F.relu(self.conv1(x)))
-        x = self.pool1(F.relu(self.conv2(x)))
-        x = torch.flatten(x, 1) # flatten all dimensions except batch
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
+        output = self.conv1(x)
+        output = F.relu(self.BatchNorm1(output))
+        output = self.conv2(output)
+        output = F.relu(self.BatchNorm2(output))
+        output = self.conv3(output)
+        output = F.relu(self.BatchNorm3(output))
+        output = self.pool(output)
+        output = torch.flatten(output, 1) # flatten all dimensions except batch
+        output = F.relu(self.fc1(output))
+        output = F.relu(self.fc2(output))
+        output = self.fc3(output)
+        return output
 
 rate_learning = 1e-3
 model = Q2Net().to(device)
