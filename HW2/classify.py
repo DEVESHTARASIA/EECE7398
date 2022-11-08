@@ -16,19 +16,20 @@ def train(dataloader, model, loss_fn, optimizer):
     model.train()
     for batch, (X, y) in enumerate(dataloader):
         X, y = X.to(device), y.to(device)
-
+    
+        optimizer.zero_grad()
         # Compute prediction error
         pred = model(X)
         loss = loss_fn(pred, y)
-
         # Backpropagation
-        optimizer.zero_grad()
         loss.backward()
+        print("Do Something")
         optimizer.step()
+        
 
-#        if batch % 100 == 0:
-#            loss, current = loss.item(), batch * len(X)
-#            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+        if batch % 100 == 0:
+            loss, current = loss.item(), batch * len(X)
+            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
             
 def test(dataloader, model, loss_fn):
     size = len(dataloader.dataset)
@@ -46,29 +47,28 @@ def test(dataloader, model, loss_fn):
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
     
 def evaluation(classes,img_path):
-    model.NeuralNetwork()
     arr = os.listdir("./")
     if "model.pth" in arr:
-        model.load_state_dict(torch.load("./model/model.pth"))
+        model.load_state_dict(torch.load("./model/model.pth",map_location=torch.device('cpu')))
         model.eval()
         name = "./"+img_path
         img = Image.open(name).convert('RGB')
         resize = transforms.Resize([32,32])
         img = resize(img)
         convert_tensor = transforms.ToTensor()
-        tensor_ip = to_tensor(img)
+        tensor_ip = convert_tensor(img)
         tensor_ip = tensor_ip.unsqueeze(0)
         with torch.no_grad():
-            pred.model(tensor_ip)
-            predicted, actual = classes[pred[0].argmax(0)], classes[y]
-            print(f'Predicted: "{predicted}", Actual: "{actual}"')
+            pred = model(tensor_ip)
+            predicted = classes[pred[0].argmax(0)]
+            print(f'Predicted: "{predicted}"')
     else:
         print("Please train the model")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-dataset = torchvision.datasets.CIFAR10(root='./data.cifar10')
+#dataset = torchvision.datasets.CIFAR10(root='./data.cifar10',download=True)
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-batchSize = 4
+batchSize = 64
 
 # ----------------- prepare training data -----------------------
 transform_q = transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))])
@@ -89,19 +89,24 @@ class Q2Net(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv2d(3,32,5,stride=1)
-        self.pool = nn.MaxPool2d(2,2)
+        self.pool1 = nn.MaxPool2d(2,2)
         self.conv2 = nn.Conv2d(32,64,5)
-
+        self.fc1 = nn.Linear(64 * 5 * 5, 120)
+        self.fc2 = nn.Linear(120, 10)
+        #self.fc3 = nn.Linear(84, 10)
+        
     def forward(self, x):
-        x = self.flatten(x)
-        logits = self.linear_relu_stack(x)
-        return logits
-
+        x = self.pool1(F.relu(self.conv1(x)))
+        x = self.pool1(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1) # flatten all dimensions except batch
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
 
 rate_learning = 1e-3
 model = Q2Net().to(device)
 loss_func = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(),lr=rate_learning, weight_decay=1e-5)
+optimizer = torch.optim.SGD(model.parameters(),lr=rate_learning, weight_decay=1e-5)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--mode', type=str, required=True)

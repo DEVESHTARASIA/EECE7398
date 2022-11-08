@@ -45,27 +45,27 @@ def test(dataloader, model, loss_fn):
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
     
 def evaluation(classes,img_path):
-    model.NeuralNetwork()
-    arr = os.listdir("./")
+    arr = os.listdir("./model/")
     if "model.pth" in arr:
-        model.load_state_dict(torch.load("./model/model.pth"))
+        model.load_state_dict(torch.load("./model/model.pth",map_location=torch.device('cpu')))
         model.eval()
         name = "./"+img_path
         img = Image.open(name).convert('RGB')
         resize = torchvision.transforms.Resize([32,32])
         img = resize(img)
         convert_tensor = torchvision.transforms.ToTensor()
-        tensor_ip = to_tensor(img)
+        tensor_ip = convert_tensor(img)
         tensor_ip = tensor_ip.unsqueeze(0)
         with torch.no_grad():
-            pred.model(tensor_ip)
-            predicted, actual = classes[pred[0].argmax(0)], classes[y]
-            print(f'Predicted: "{predicted}", Actual: "{actual}"')
+            pred = model(tensor_ip)
+            predicted = classes[pred[0].argmax(0)]
+            print(f'Predicted: "{predicted}"')
     else:
         print("Please train the model")
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-device = "cuda" if torch.cuda.is_available() else "cpu"
+#device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu"
 batchSize = 64
 dataset = torchvision.datasets.CIFAR10(root='./data.cifar10')
 
